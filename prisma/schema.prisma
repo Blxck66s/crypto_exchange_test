@@ -1,0 +1,190 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum currency_type {
+  fiat
+  crypto
+}
+
+enum order_type {
+  buy
+  sell
+}
+
+enum payment_method {
+  bank_transfer
+  prompt_pay
+}
+
+enum order_status {
+  open
+  matched
+  pending_payment
+  cancelled
+  expired
+}
+
+enum transaction_type {
+  deposit
+  withdraw
+  order
+  trade
+}
+
+enum transaction_status {
+  pending
+  completed
+  failed
+}
+
+enum on_chain_tx_type {
+  transfer
+  approval
+}
+
+enum network {
+  bitcoin
+  ethereum
+  xrp
+  dogecoin
+}
+
+model user {
+  id             String                @id @default(uuid()) @db.Uuid
+  display_name   String
+  email          String                @unique
+  password       String
+  status         String                @default("active")
+  role           String                @default("user")
+  created_at     DateTime              @default(now())
+  updated_at     DateTime              @updatedAt
+
+  orders         order[]
+  wallets        user_wallet[]
+}
+
+model currency {
+  id               String               @id @default(uuid()) @db.Uuid
+  name             String               @db.VarChar(100)
+  code_name        String               @unique @db.VarChar(10)
+  type             currency_type
+  contract_address String?
+  decimals         Int                  @default(18)
+  created_at       DateTime             @default(now())
+  updated_at       DateTime             @updatedAt
+
+  wallets          user_wallet[]
+  orders           order[]              @relation("fiat_currency")
+  base_orders      order[]              @relation("base_currency")
+  transactions_in  transaction[]        @relation("currency_in")
+  transactions_out transaction[]        @relation("currency_out")
+  on_chain_txs     on_chain_transaction[] @relation("currency_on_chain")
+  @@unique([code_name, type])
+}
+
+model user_wallet {
+  id              String               @id @default(uuid()) @db.Uuid
+  user_id         String               @db.Uuid
+  currency_id     String               @db.Uuid
+  deposit_address String               @unique
+  balance         Decimal              @default(0)
+  created_at      DateTime             @default(now())
+  updated_at      DateTime             @updatedAt
+
+  user            user                 @relation(fields: [user_id], references: [id])
+  currency        currency             @relation(fields: [currency_id], references: [id])
+  tx_from         transaction[]        @relation("from_wallet")
+  tx_to           transaction[]        @relation("to_wallet")
+
+  @@unique([user_id, currency_id])
+}
+
+model order {
+  id                   String               @id @default(uuid()) @db.Uuid
+  user_id              String               @db.Uuid
+  base_currency_id     String               @db.Uuid
+  fiat_currency_id     String               @db.Uuid
+  order_type           order_type
+  price                Decimal              @db.Decimal(36, 18)
+  original_amount      Decimal              @db.Decimal(36, 18)
+  remaining_amount     Decimal              @db.Decimal(36, 18)
+  min_amount_to_order  Decimal?             @db.Decimal(36, 18)
+  max_amount_to_order  Decimal?             @db.Decimal(36, 18)
+  payment_method       payment_method       @default(bank_transfer)
+  status               order_status         @default(open)
+  reserve_time         DateTime?
+  created_at           DateTime             @default(now())
+  updated_at           DateTime             @updatedAt
+
+  user                 user                 @relation(fields: [user_id], references: [id])
+  base_currency        currency             @relation("base_currency", fields: [base_currency_id], references: [id])
+  fiat_currency        currency             @relation("fiat_currency", fields: [fiat_currency_id], references: [id])
+  matches_as_buy       order_match[]        @relation("buy_orders")
+  matches_as_sell      order_match[]        @relation("sell_orders")
+}
+
+model order_match {
+  id             String                @id @default(uuid()) @db.Uuid
+  buy_order_id   String                @db.Uuid
+  sell_order_id  String                @db.Uuid
+  transaction_id String                @db.Uuid @unique
+  created_at     DateTime              @default(now())
+
+  buy_order      order                 @relation("buy_orders", fields: [buy_order_id], references: [id])
+  sell_order     order                 @relation("sell_orders", fields: [sell_order_id], references: [id])
+  transaction    transaction           @relation("order_match_tx", fields: [transaction_id], references: [id])
+
+}
+
+model transaction {
+  id               String                @id @default(uuid()) @db.Uuid
+  from_wallet_id   String                @db.Uuid
+  to_wallet_id     String?               @db.Uuid
+  order_match_id   String?               @db.Uuid
+  amount_in        Decimal               @db.Decimal(36, 18)
+  amount_out       Decimal               @db.Decimal(36, 18)
+  currency_in_id   String                @db.Uuid
+  currency_out_id  String                @db.Uuid
+  on_chain_tx_id   String?               @db.Uuid
+  fee              Decimal               @default(0)
+  type             transaction_type
+  status           transaction_status    @default(pending)
+  created_at       DateTime              @default(now())
+  updated_at       DateTime              @updatedAt
+
+  from_wallet      user_wallet           @relation("from_wallet", fields: [from_wallet_id], references: [id])
+  to_wallet        user_wallet?          @relation("to_wallet", fields: [to_wallet_id], references: [id])
+  order_match      order_match?          @relation("order_match_tx")
+  currency_in      currency              @relation(fields: [currency_in_id], references: [id] , name: "currency_in")
+  currency_out     currency              @relation(fields: [currency_out_id], references: [id] , name: "currency_out")
+}
+
+model on_chain_transaction {
+  id             String                @id @default(uuid()) @db.Uuid
+  tx_hash        String                @db.VarChar(255)
+  type           on_chain_tx_type
+  network        network
+  data           Json
+  block_number   BigInt?               
+  confirmations  Int                   @default(0)
+  timestamp      DateTime?             
+  error          String?               
+  created_at     DateTime              @default(now())
+  updated_at     DateTime              @updatedAt
+
+  currency_id    String                @db.Uuid
+  currency       currency              @relation("currency_on_chain", fields: [currency_id], references: [id])
+}
