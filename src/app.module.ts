@@ -11,12 +11,34 @@ import { OrdersModule } from './orders/orders.module';
 import { OrderMatchesModule } from './order_matches/order_matches.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { OnChainTransactionsModule } from './on_chain_transactions/on_chain_transactions.module';
-import { ConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ConfigModule } from '@nestjs/config';
+import { JwtGuard } from './auth/guard/jwt.guard';
 
 @Module({
-  imports: [UsersModule, AuthModule, CurrenciesModule, WalletsModule, OrdersModule, OrderMatchesModule, TransactionsModule, OnChainTransactionsModule, ConfigModule, PrismaModule],
+  imports: [
+    UsersModule,
+    AuthModule,
+    CurrenciesModule,
+    WalletsModule,
+    OrdersModule,
+    OrderMatchesModule,
+    TransactionsModule,
+    OnChainTransactionsModule,
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    PrismaModule,
+  ],
   controllers: [AppController, UsersController],
-  providers: [AppService, UsersService],
+  providers: [
+    AppService,
+    UsersService,
+    {
+      provide: 'APP_GUARD',
+      useClass: JwtGuard,
+    },
+  ],
 })
 export class AppModule {}

@@ -6,7 +6,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -62,129 +61,141 @@ enum network {
   dogecoin
 }
 
-model user {
-  id             String                @id @default(uuid()) @db.Uuid
-  display_name   String
-  email          String                @unique
-  password       String
-  status         String                @default("active")
-  role           String                @default("user")
-  created_at     DateTime              @default(now())
-  updated_at     DateTime              @updatedAt
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  displayName  String        @map("display_name")
+  email        String        @unique
+  password     String        
+  status       String        @default("active")
+  role         String        @default("user")
+  createdAt    DateTime      @default(now())    @map("created_at")
+  updatedAt    DateTime      @updatedAt         @map("updated_at")
 
-  orders         order[]
-  wallets        user_wallet[]
+  orders       Order[]       
+  wallets      UserWallet[]  
+
+  @@map("user")
 }
 
-model currency {
-  id               String               @id @default(uuid()) @db.Uuid
-  name             String               @db.VarChar(100)
-  code_name        String               @unique @db.VarChar(10)
+model Currency {
+  id               String        @id @default(uuid()) @db.Uuid
+  name             String        
+  codeName         String        @unique @db.VarChar(10) @map("code_name")
   type             currency_type
-  contract_address String?
-  decimals         Int                  @default(18)
-  created_at       DateTime             @default(now())
-  updated_at       DateTime             @updatedAt
+  contractAddress  String?       @map("contract_address")
+  decimals         Int           @default(18)
+  createdAt        DateTime      @default(now())         @map("created_at")
+  updatedAt        DateTime      @updatedAt              @map("updated_at")
 
-  wallets          user_wallet[]
-  orders           order[]              @relation("fiat_currency")
-  base_orders      order[]              @relation("base_currency")
-  transactions_in  transaction[]        @relation("currency_in")
-  transactions_out transaction[]        @relation("currency_out")
-  on_chain_txs     on_chain_transaction[] @relation("currency_on_chain")
-  @@unique([code_name, type])
+  wallets          UserWallet[]  
+  orders           Order[]       @relation("fiat_currency")
+  baseOrders       Order[]       @relation("base_currency")
+  transactionsIn   Transaction[] @relation("currency_in")
+  transactionsOut  Transaction[] @relation("currency_out")
+  onChainTxs       OnChainTransaction[] @relation("currency_on_chain")
+
+  @@unique([codeName, type])
+  @@map("currency")
 }
 
-model user_wallet {
-  id              String               @id @default(uuid()) @db.Uuid
-  user_id         String               @db.Uuid
-  currency_id     String               @db.Uuid
-  deposit_address String               @unique
-  balance         Decimal              @default(0)
-  created_at      DateTime             @default(now())
-  updated_at      DateTime             @updatedAt
+model UserWallet {
+  id              String       @id @default(uuid()) @db.Uuid @map("id")
+  userId          String       @db.Uuid @map("user_id")
+  currencyId      String       @db.Uuid @map("currency_id")
+  depositAddress  String       @unique  @map("deposit_address")
+  balance         Decimal      @default(0)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt      @map("updated_at")
 
-  user            user                 @relation(fields: [user_id], references: [id])
-  currency        currency             @relation(fields: [currency_id], references: [id])
-  tx_from         transaction[]        @relation("from_wallet")
-  tx_to           transaction[]        @relation("to_wallet")
+  user            User         @relation(fields: [userId], references: [id])
+  currency        Currency     @relation(fields: [currencyId], references: [id])
+  txFrom          Transaction[] @relation("from_wallet")
+  txTo            Transaction[] @relation("to_wallet")
 
-  @@unique([user_id, currency_id])
+  @@unique([userId, currencyId])
+  @@map("user_wallet")
 }
 
-model order {
+model Order {
   id                   String               @id @default(uuid()) @db.Uuid
-  user_id              String               @db.Uuid
-  base_currency_id     String               @db.Uuid
-  fiat_currency_id     String               @db.Uuid
-  order_type           order_type
+  userId               String               @db.Uuid @map("user_id")
+  baseCurrencyId       String               @db.Uuid @map("base_currency_id")
+  fiatCurrencyId       String               @db.Uuid @map("fiat_currency_id")
+  orderType            order_type           @map("order_type")
   price                Decimal              @db.Decimal(36, 18)
-  original_amount      Decimal              @db.Decimal(36, 18)
-  remaining_amount     Decimal              @db.Decimal(36, 18)
-  min_amount_to_order  Decimal?             @db.Decimal(36, 18)
-  max_amount_to_order  Decimal?             @db.Decimal(36, 18)
-  payment_method       payment_method       @default(bank_transfer)
+  originalAmount       Decimal              @db.Decimal(36, 18) @map("original_amount")
+  remainingAmount      Decimal              @db.Decimal(36, 18) @map("remaining_amount")
+  minAmountToOrder     Decimal?             @db.Decimal(36, 18) @map("min_amount_to_order")
+  maxAmountToOrder     Decimal?             @db.Decimal(36, 18) @map("max_amount_to_order")
+  paymentMethod        payment_method       @default(bank_transfer) @map("payment_method")
   status               order_status         @default(open)
-  reserve_time         DateTime?
-  created_at           DateTime             @default(now())
-  updated_at           DateTime             @updatedAt
+  reserveTime          DateTime?            @map("reserve_time")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
 
-  user                 user                 @relation(fields: [user_id], references: [id])
-  base_currency        currency             @relation("base_currency", fields: [base_currency_id], references: [id])
-  fiat_currency        currency             @relation("fiat_currency", fields: [fiat_currency_id], references: [id])
-  matches_as_buy       order_match[]        @relation("buy_orders")
-  matches_as_sell      order_match[]        @relation("sell_orders")
+  user                 User                 @relation(fields: [userId], references: [id])
+  baseCurrency         Currency             @relation("base_currency", fields: [baseCurrencyId], references: [id])
+  fiatCurrency         Currency             @relation("fiat_currency", fields: [fiatCurrencyId], references: [id])
+  matchesAsBuy        OrderMatch[]        @relation("buy_orders")
+  matchesAsSell       OrderMatch[]        @relation("sell_orders")
+
+  @@map("order")
 }
 
-model order_match {
+model OrderMatch {
   id             String                @id @default(uuid()) @db.Uuid
-  buy_order_id   String                @db.Uuid
-  sell_order_id  String                @db.Uuid
-  transaction_id String                @db.Uuid @unique
-  created_at     DateTime              @default(now())
+  buyOrderId     String                @db.Uuid @map("buy_order_id")
+  sellOrderId    String                @db.Uuid @map("sell_order_id")
+  transactionId  String                @db.Uuid @unique @map("transaction_id")
+  createdAt     DateTime              @default(now())
 
-  buy_order      order                 @relation("buy_orders", fields: [buy_order_id], references: [id])
-  sell_order     order                 @relation("sell_orders", fields: [sell_order_id], references: [id])
-  transaction    transaction           @relation("order_match_tx", fields: [transaction_id], references: [id])
+  buyOrder      Order                 @relation("buy_orders", fields: [buyOrderId], references: [id])
+  sellOrder     Order                 @relation("sell_orders", fields: [sellOrderId], references: [id])
+  transaction    Transaction           @relation("order_match_tx", fields: [transactionId], references: [id])
 
+  @@map("order_match")
 }
 
-model transaction {
+model Transaction {
   id               String                @id @default(uuid()) @db.Uuid
-  from_wallet_id   String                @db.Uuid
-  to_wallet_id     String?               @db.Uuid
-  order_match_id   String?               @db.Uuid
-  amount_in        Decimal               @db.Decimal(36, 18)
-  amount_out       Decimal               @db.Decimal(36, 18)
-  currency_in_id   String                @db.Uuid
-  currency_out_id  String                @db.Uuid
-  on_chain_tx_id   String?               @db.Uuid
+  fromWalletId     String                @db.Uuid @map("from_wallet_id")
+  toWalletId       String?               @db.Uuid @map("to_wallet_id")
+  orderMatchId     String?               @db.Uuid @map("order_match_id")
+  amountIn         Decimal               @db.Decimal(36, 18) @map("amount_in")
+  amountOut        Decimal               @db.Decimal(36, 18) @map("amount_out")
+  currencyInId     String                @db.Uuid @map("currency_in_id")
+  currencyOutId    String                @db.Uuid @map("currency_out_id")
+  onChainTxId      String?               @db.Uuid @map("on_chain_tx_id")
   fee              Decimal               @default(0)
-  type             transaction_type
+  type             transaction_type      
   status           transaction_status    @default(pending)
-  created_at       DateTime              @default(now())
-  updated_at       DateTime              @updatedAt
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
 
-  from_wallet      user_wallet           @relation("from_wallet", fields: [from_wallet_id], references: [id])
-  to_wallet        user_wallet?          @relation("to_wallet", fields: [to_wallet_id], references: [id])
-  order_match      order_match?          @relation("order_match_tx")
-  currency_in      currency              @relation(fields: [currency_in_id], references: [id] , name: "currency_in")
-  currency_out     currency              @relation(fields: [currency_out_id], references: [id] , name: "currency_out")
+  fromWallet      UserWallet             @relation("from_wallet", fields: [fromWalletId], references: [id])
+  toWallet        UserWallet?            @relation("to_wallet", fields: [toWalletId], references: [id])
+  orderMatch      OrderMatch?            @relation("order_match_tx")
+  currencyIn      Currency               @relation(fields: [currencyInId], references: [id] , name: "currency_in")
+  currencyOut     Currency               @relation(fields: [currencyOutId], references: [id] , name: "currency_out")
+
+  @@map("transaction")
 }
 
-model on_chain_transaction {
+model OnChainTransaction {
   id             String                @id @default(uuid()) @db.Uuid
-  tx_hash        String                @db.VarChar(255)
+  txHash         String                @db.VarChar(255) @map("tx_hash")
   type           on_chain_tx_type
   network        network
   data           Json
-  block_number   BigInt?               
+  blockNumber    BigInt?               @map("block_number")
   confirmations  Int                   @default(0)
   timestamp      DateTime?             
   error          String?               
-  created_at     DateTime              @default(now())
-  updated_at     DateTime              @updatedAt
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
 
-  currency_id    String                @db.Uuid
-  currency       currency              @relation("currency_on_chain", fields: [currency_id], references: [id])
+  currencyId     String                @db.Uuid @map("currency_id")
+  currency       Currency              @relation("currency_on_chain", fields: [currencyId], references: [id])
+
+  @@map("on_chain_transaction")
 }
