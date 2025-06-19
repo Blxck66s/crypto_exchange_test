@@ -30,8 +30,6 @@ enum payment_method {
 
 enum order_status {
   open
-  matched
-  pending_payment
   cancelled
   expired
 }
@@ -40,25 +38,16 @@ enum transaction_type {
   deposit
   withdraw
   order
-  trade
+  place_order
+  cancel_order
+  transfer_crypto
+  transfer_fiat
 }
 
 enum transaction_status {
   pending
   completed
   failed
-}
-
-enum on_chain_tx_type {
-  transfer
-  approval
-}
-
-enum network {
-  bitcoin
-  ethereum
-  xrp
-  dogecoin
 }
 
 model User {
@@ -90,9 +79,6 @@ model Currency {
   wallets          UserWallet[]  
   orders           Order[]       @relation("fiat_currency")
   baseOrders       Order[]       @relation("base_currency")
-  transactionsIn   Transaction[] @relation("currency_in")
-  transactionsOut  Transaction[] @relation("currency_out")
-  onChainTxs       OnChainTransaction[] @relation("currency_on_chain")
 
   @@unique([codeName, type])
   @@map("currency")
@@ -102,7 +88,8 @@ model UserWallet {
   id              String       @id @default(uuid()) @db.Uuid @map("id")
   userId          String       @db.Uuid @map("user_id")
   currencyId      String       @db.Uuid @map("currency_id")
-  depositAddress  String       @unique  @map("deposit_address")
+  depositAddress  String?      @unique  @map("deposit_address")
+  privateKey      Json?        @map("private_key")
   balance         Decimal      @default(0)
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt      @map("updated_at")
@@ -127,33 +114,15 @@ model Order {
   remainingAmount      Decimal              @db.Decimal(36, 18) @map("remaining_amount")
   minAmountToOrder     Decimal?             @db.Decimal(36, 18) @map("min_amount_to_order")
   maxAmountToOrder     Decimal?             @db.Decimal(36, 18) @map("max_amount_to_order")
-  paymentMethod        payment_method       @default(bank_transfer) @map("payment_method")
   status               order_status         @default(open)
-  reserveTime          DateTime?            @map("reserve_time")
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
 
   user                 User                 @relation(fields: [userId], references: [id])
   baseCurrency         Currency             @relation("base_currency", fields: [baseCurrencyId], references: [id])
   fiatCurrency         Currency             @relation("fiat_currency", fields: [fiatCurrencyId], references: [id])
-  matchesAsBuy        OrderMatch[]        @relation("buy_orders")
-  matchesAsSell       OrderMatch[]        @relation("sell_orders")
 
   @@map("order")
-}
-
-model OrderMatch {
-  id             String                @id @default(uuid()) @db.Uuid
-  buyOrderId     String                @db.Uuid @map("buy_order_id")
-  sellOrderId    String                @db.Uuid @map("sell_order_id")
-  transactionId  String                @db.Uuid @unique @map("transaction_id")
-  createdAt     DateTime              @default(now())
-
-  buyOrder      Order                 @relation("buy_orders", fields: [buyOrderId], references: [id])
-  sellOrder     Order                 @relation("sell_orders", fields: [sellOrderId], references: [id])
-  transaction    Transaction           @relation("order_match_tx", fields: [transactionId], references: [id])
-
-  @@map("order_match")
 }
 
 model Transaction {
@@ -163,9 +132,6 @@ model Transaction {
   orderMatchId     String?               @db.Uuid @map("order_match_id")
   amountIn         Decimal               @db.Decimal(36, 18) @map("amount_in")
   amountOut        Decimal               @db.Decimal(36, 18) @map("amount_out")
-  currencyInId     String                @db.Uuid @map("currency_in_id")
-  currencyOutId    String                @db.Uuid @map("currency_out_id")
-  onChainTxId      String?               @db.Uuid @map("on_chain_tx_id")
   fee              Decimal               @default(0)
   type             transaction_type      
   status           transaction_status    @default(pending)
@@ -174,28 +140,6 @@ model Transaction {
 
   fromWallet      UserWallet             @relation("from_wallet", fields: [fromWalletId], references: [id])
   toWallet        UserWallet?            @relation("to_wallet", fields: [toWalletId], references: [id])
-  orderMatch      OrderMatch?            @relation("order_match_tx")
-  currencyIn      Currency               @relation(fields: [currencyInId], references: [id] , name: "currency_in")
-  currencyOut     Currency               @relation(fields: [currencyOutId], references: [id] , name: "currency_out")
 
   @@map("transaction")
-}
-
-model OnChainTransaction {
-  id             String                @id @default(uuid()) @db.Uuid
-  txHash         String                @db.VarChar(255) @map("tx_hash")
-  type           on_chain_tx_type
-  network        network
-  data           Json
-  blockNumber    BigInt?               @map("block_number")
-  confirmations  Int                   @default(0)
-  timestamp      DateTime?             
-  error          String?               
-  createdAt      DateTime              @default(now()) @map("created_at")
-  updatedAt      DateTime              @updatedAt @map("updated_at")
-
-  currencyId     String                @db.Uuid @map("currency_id")
-  currency       Currency              @relation("currency_on_chain", fields: [currencyId], references: [id])
-
-  @@map("on_chain_transaction")
 }

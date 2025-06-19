@@ -8,19 +8,13 @@ CREATE TYPE "order_type" AS ENUM ('buy', 'sell');
 CREATE TYPE "payment_method" AS ENUM ('bank_transfer', 'prompt_pay');
 
 -- CreateEnum
-CREATE TYPE "order_status" AS ENUM ('open', 'matched', 'pending_payment', 'cancelled', 'expired');
+CREATE TYPE "order_status" AS ENUM ('open', 'cancelled', 'expired');
 
 -- CreateEnum
-CREATE TYPE "transaction_type" AS ENUM ('deposit', 'withdraw', 'order', 'trade');
+CREATE TYPE "transaction_type" AS ENUM ('deposit', 'withdraw', 'order', 'transfer_crypto', 'transfer_fiat');
 
 -- CreateEnum
 CREATE TYPE "transaction_status" AS ENUM ('pending', 'completed', 'failed');
-
--- CreateEnum
-CREATE TYPE "on_chain_tx_type" AS ENUM ('transfer', 'approval');
-
--- CreateEnum
-CREATE TYPE "network" AS ENUM ('bitcoin', 'ethereum', 'xrp', 'dogecoin');
 
 -- CreateTable
 CREATE TABLE "user" (
@@ -55,7 +49,8 @@ CREATE TABLE "user_wallet" (
     "id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
     "currency_id" UUID NOT NULL,
-    "deposit_address" TEXT NOT NULL,
+    "deposit_address" TEXT,
+    "private_key" JSONB,
     "balance" DECIMAL(65,30) NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -75,9 +70,7 @@ CREATE TABLE "order" (
     "remaining_amount" DECIMAL(36,18) NOT NULL,
     "min_amount_to_order" DECIMAL(36,18),
     "max_amount_to_order" DECIMAL(36,18),
-    "payment_method" "payment_method" NOT NULL DEFAULT 'bank_transfer',
     "status" "order_status" NOT NULL DEFAULT 'open',
-    "reserve_time" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -103,9 +96,6 @@ CREATE TABLE "transaction" (
     "order_match_id" UUID,
     "amount_in" DECIMAL(36,18) NOT NULL,
     "amount_out" DECIMAL(36,18) NOT NULL,
-    "currency_in_id" UUID NOT NULL,
-    "currency_out_id" UUID NOT NULL,
-    "on_chain_tx_id" UUID,
     "fee" DECIMAL(65,30) NOT NULL DEFAULT 0,
     "type" "transaction_type" NOT NULL,
     "status" "transaction_status" NOT NULL DEFAULT 'pending',
@@ -113,24 +103,6 @@ CREATE TABLE "transaction" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "transaction_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "on_chain_transaction" (
-    "id" UUID NOT NULL,
-    "tx_hash" VARCHAR(255) NOT NULL,
-    "type" "on_chain_tx_type" NOT NULL,
-    "network" "network" NOT NULL,
-    "data" JSONB NOT NULL,
-    "block_number" BIGINT,
-    "confirmations" INTEGER NOT NULL DEFAULT 0,
-    "timestamp" TIMESTAMP(3),
-    "error" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-    "currency_id" UUID NOT NULL,
-
-    CONSTRAINT "on_chain_transaction_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -180,12 +152,3 @@ ALTER TABLE "transaction" ADD CONSTRAINT "transaction_from_wallet_id_fkey" FOREI
 
 -- AddForeignKey
 ALTER TABLE "transaction" ADD CONSTRAINT "transaction_to_wallet_id_fkey" FOREIGN KEY ("to_wallet_id") REFERENCES "user_wallet"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transaction" ADD CONSTRAINT "transaction_currency_in_id_fkey" FOREIGN KEY ("currency_in_id") REFERENCES "currency"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transaction" ADD CONSTRAINT "transaction_currency_out_id_fkey" FOREIGN KEY ("currency_out_id") REFERENCES "currency"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "on_chain_transaction" ADD CONSTRAINT "on_chain_transaction_currency_id_fkey" FOREIGN KEY ("currency_id") REFERENCES "currency"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
