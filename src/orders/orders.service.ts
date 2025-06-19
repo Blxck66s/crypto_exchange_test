@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { order_status, order_type } from '@prisma/client';
+import { currency_type, order_status, order_type } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateOrderDto } from './dto';
+import { PlaceOrderDto } from './dto';
 import { Decimal } from '@prisma/client/runtime/library';
 import { TransactionsService } from 'src/transactions/transactions.service';
 
@@ -12,20 +12,42 @@ export class OrdersService {
     private readonly transactionsService: TransactionsService,
   ) {}
 
-  async placeOrder(userId: string, createOrderDto: CreateOrderDto) {
+  async placeOrder(userId: string, placeOrderDto: PlaceOrderDto) {
+    const currency = await this.prisma.currency.findFirst({
+      where: { id: placeOrderDto.baseCurrencyId, type: currency_type.crypto },
+    });
+    if (!currency) {
+      throw new Error('Base currency not found or not a crypto currency');
+    }
+    if (Decimal(placeOrderDto.originalAmount).lte(0)) {
+      throw new Error('Original amount must be greater than zero');
+    }
+    if (Decimal(placeOrderDto.price).lte(0)) {
+      throw new Error('Price must be greater than zero');
+    }
+    if (!placeOrderDto.maxAmountToOrder) {
+      placeOrderDto.maxAmountToOrder = placeOrderDto.originalAmount;
+    }
+    if (
+      Decimal(placeOrderDto.originalAmount).gt(
+        Decimal(placeOrderDto.maxAmountToOrder),
+      )
+    ) {
+      throw new Error('Original amount exceeds maximum limit');
+    }
     const order = this.prisma.order.create({
       data: {
         userId,
-        ...createOrderDto,
-        remainingAmount: createOrderDto.originalAmount,
+        ...placeOrderDto,
+        remainingAmount: placeOrderDto.originalAmount,
       },
     });
 
     const walletUpdate = this.prisma.userWallet.updateMany({
-      where: { userId, currencyId: createOrderDto.baseCurrencyId },
+      where: { userId, currencyId: placeOrderDto.baseCurrencyId },
       data: {
         balance: {
-          decrement: createOrderDto.originalAmount,
+          decrement: placeOrderDto.originalAmount,
         },
       },
     });
@@ -37,14 +59,17 @@ export class OrdersService {
   async listOpenOrders(baseCurrencyId: string, orderType: order_type) {
     return this.prisma.order.findMany({
       where: { baseCurrencyId, status: order_status.open, orderType },
-      include: { user: true },
+      include: {
+        user: {
+          select: { id: true, displayName: true, email: true },
+        },
+      },
     });
   }
 
   async orderUpdate(userId: string, orderId: string, toStatus: order_status) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { user: true },
     });
     if (!order) throw new Error('Order not found');
     if (order.userId !== userId) throw new Error('Unauthorized');
@@ -84,72 +109,79 @@ export class OrdersService {
     if (!order) throw new Error('Order not found');
     if (order.userId === userId)
       throw new Error('Cannot buy or sell to your own order');
-    if (amount > order.remainingAmount)
-      throw new Error('Insufficient order amount');
     if (order.orderType === action) {
       throw new Error(`Cannot ${action} an order of the same type`);
     }
+    if (Decimal(amount).gt(order.remainingAmount)) {
+      throw new Error('Amount exceeds remaining order amount');
+    }
+
+    const buyeeId = action === 'buy' ? userId : order.userId;
+    const sellerId = action === 'buy' ? order.userId : userId;
+
     switch (action) {
       case 'buy': {
         const userWallet = await this.prisma.userWallet.findFirst({
-          where: { userId, currencyId: order.baseCurrencyId },
+          where: { userId: buyeeId, currencyId: order.fiatCurrencyId },
         });
-        if (!userWallet || userWallet.balance.lt(amount.mul(order.price))) {
+        if (
+          !userWallet ||
+          userWallet.balance.lt(Decimal(amount).mul(order.price))
+        ) {
           throw new Error('Insufficient balance in user wallet');
         }
         const orderUpdate = this.prisma.order.update({
           where: { id: orderId },
           data: { remainingAmount: order.remainingAmount.sub(amount) },
         });
-        const buyeeWalletUpdate = this.prisma.userWallet.updateMany({
-          where: { userId, currencyId: order.baseCurrencyId },
+
+        const walletUpdate = this.prisma.userWallet.updateMany({
+          where: { userId: buyeeId, currencyId: order.fiatCurrencyId },
           data: {
             balance: {
-              decrement: amount.mul(order.price),
+              increment: Decimal(amount).mul(order.price),
             },
           },
         });
 
         // transfer on blockchain
 
-        await Promise.all([orderUpdate, buyeeWalletUpdate]);
+        await Promise.all([orderUpdate, walletUpdate]);
         return await this.transactionsService.order(
-          userId,
-          order.userId,
+          buyeeId,
+          sellerId,
           amount,
-          amount.mul(order.price),
-          'completed',
+          amount,
         );
       }
       case 'sell': {
         const userWallet = await this.prisma.userWallet.findFirst({
-          where: { userId, currencyId: order.fiatCurrencyId },
+          where: { userId: sellerId, currencyId: order.baseCurrencyId },
         });
-        if (!userWallet || userWallet.balance.lt(amount)) {
+        if (!userWallet || userWallet.balance.lt(Decimal(amount))) {
           throw new Error('Insufficient balance in user wallet');
         }
         const orderUpdate = this.prisma.order.update({
           where: { id: orderId },
           data: { remainingAmount: order.remainingAmount.sub(amount) },
         });
-        const sellerWalletUpdate = this.prisma.userWallet.updateMany({
-          where: { userId, currencyId: order.fiatCurrencyId },
+
+        const walletUpdate = this.prisma.userWallet.updateMany({
+          where: { userId: sellerId, currencyId: order.baseCurrencyId },
           data: {
             balance: {
-              increment: amount.mul(order.price),
+              decrement: amount,
             },
           },
         });
 
         // transfer on blockchain
-
-        await Promise.all([orderUpdate, sellerWalletUpdate]);
+        await Promise.all([orderUpdate, walletUpdate]);
         return await this.transactionsService.order(
-          order.userId,
-          userId,
+          sellerId,
+          buyeeId,
           amount,
-          amount.mul(order.price),
-          'completed',
+          amount,
         );
       }
       default:

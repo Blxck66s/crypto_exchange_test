@@ -81,7 +81,25 @@ async function main() {
         currencyId: eth.id,
         depositAddress: ethWallet.address,
         privateKey: await ethWallet.encrypt(process.env.WALLET_ENCRYPTION_KEY),
+        balance: 1000,
       },
+      {
+        userId: orderSeller.id,
+        currencyId: thb.id,
+        balance: 0,
+      },
+      {
+        userId: orderSeller.id,
+        currencyId: usd.id,
+        balance: 0,
+      },
+      {
+        userId: orderBuyer.id,
+        currencyId: eth.id,
+        depositAddress: ethWallet.address,
+        privateKey: await ethWallet.encrypt(process.env.WALLET_ENCRYPTION_KEY),
+      },
+
       {
         userId: orderBuyer.id,
         currencyId: thb.id,

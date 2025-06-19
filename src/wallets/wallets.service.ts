@@ -117,8 +117,9 @@ export class WalletsService {
     await this.prisma.$transaction([fromWalletUpdate, toWalletUpdate]);
 
     await this.transactionsService.trade(
-      fromWalletId,
-      toWalletId,
+      fromWallet.userId,
+      toWallet.userId,
+      toWallet.depositAddress,
       amount,
       fromWallet.currency.type,
       'completed',
@@ -160,7 +161,8 @@ export class WalletsService {
     await this.prisma.$transaction([fromWalletUpdate]);
 
     await this.transactionsService.trade(
-      fromWalletId,
+      fromWallet.userId,
+      null,
       toAddress,
       amount,
       fromWallet.currency.type,

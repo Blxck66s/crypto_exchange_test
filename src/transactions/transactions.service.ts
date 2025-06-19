@@ -7,16 +7,18 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
   async trade(
-    fromWalletId: string,
-    toWalletId: string,
+    fromUserId: string,
+    toUserId: string | null = null,
+    toAddress: string | null = null,
     amount: Decimal,
     currencyType: currency_type,
     status: transaction_status = 'pending',
   ) {
     return await this.prisma.transaction.create({
       data: {
-        fromWalletId,
-        toWalletId,
+        fromUserId,
+        toUserId,
+        toAddress,
         amountIn: amount,
         amountOut: amount, // for fee deduction in production
         type:
@@ -29,8 +31,8 @@ export class TransactionsService {
   }
 
   async order(
-    fromWalletId: string,
-    toWalletId: string,
+    fromUserId: string,
+    toUserId: string,
     amountIn: Decimal,
     amountOut: Decimal,
     status: transaction_status = 'completed',
@@ -38,8 +40,8 @@ export class TransactionsService {
   ) {
     return await this.prisma.transaction.create({
       data: {
-        fromWalletId,
-        toWalletId,
+        fromUserId,
+        toUserId,
         amountIn,
         amountOut,
         type,

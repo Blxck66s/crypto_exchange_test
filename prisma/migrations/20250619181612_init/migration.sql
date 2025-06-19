@@ -11,7 +11,7 @@ CREATE TYPE "payment_method" AS ENUM ('bank_transfer', 'prompt_pay');
 CREATE TYPE "order_status" AS ENUM ('open', 'cancelled', 'expired');
 
 -- CreateEnum
-CREATE TYPE "transaction_type" AS ENUM ('deposit', 'withdraw', 'order', 'transfer_crypto', 'transfer_fiat');
+CREATE TYPE "transaction_type" AS ENUM ('deposit', 'withdraw', 'order', 'place_order', 'cancel_order', 'transfer_crypto', 'transfer_fiat');
 
 -- CreateEnum
 CREATE TYPE "transaction_status" AS ENUM ('pending', 'completed', 'failed');
@@ -78,22 +78,12 @@ CREATE TABLE "order" (
 );
 
 -- CreateTable
-CREATE TABLE "order_match" (
-    "id" UUID NOT NULL,
-    "buy_order_id" UUID NOT NULL,
-    "sell_order_id" UUID NOT NULL,
-    "transaction_id" UUID NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "order_match_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "transaction" (
     "id" UUID NOT NULL,
-    "from_wallet_id" UUID NOT NULL,
-    "to_wallet_id" UUID,
-    "order_match_id" UUID,
+    "from_user_id" UUID,
+    "to_user_id" UUID,
+    "to_address" TEXT,
+    "order_id" UUID,
     "amount_in" DECIMAL(36,18) NOT NULL,
     "amount_out" DECIMAL(36,18) NOT NULL,
     "fee" DECIMAL(65,30) NOT NULL DEFAULT 0,
@@ -120,9 +110,6 @@ CREATE UNIQUE INDEX "user_wallet_deposit_address_key" ON "user_wallet"("deposit_
 -- CreateIndex
 CREATE UNIQUE INDEX "user_wallet_user_id_currency_id_key" ON "user_wallet"("user_id", "currency_id");
 
--- CreateIndex
-CREATE UNIQUE INDEX "order_match_transaction_id_key" ON "order_match"("transaction_id");
-
 -- AddForeignKey
 ALTER TABLE "user_wallet" ADD CONSTRAINT "user_wallet_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -139,16 +126,10 @@ ALTER TABLE "order" ADD CONSTRAINT "order_base_currency_id_fkey" FOREIGN KEY ("b
 ALTER TABLE "order" ADD CONSTRAINT "order_fiat_currency_id_fkey" FOREIGN KEY ("fiat_currency_id") REFERENCES "currency"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "order_match" ADD CONSTRAINT "order_match_buy_order_id_fkey" FOREIGN KEY ("buy_order_id") REFERENCES "order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "transaction" ADD CONSTRAINT "transaction_from_user_id_fkey" FOREIGN KEY ("from_user_id") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "order_match" ADD CONSTRAINT "order_match_sell_order_id_fkey" FOREIGN KEY ("sell_order_id") REFERENCES "order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "transaction" ADD CONSTRAINT "transaction_to_user_id_fkey" FOREIGN KEY ("to_user_id") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "order_match" ADD CONSTRAINT "order_match_transaction_id_fkey" FOREIGN KEY ("transaction_id") REFERENCES "transaction"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transaction" ADD CONSTRAINT "transaction_from_wallet_id_fkey" FOREIGN KEY ("from_wallet_id") REFERENCES "user_wallet"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transaction" ADD CONSTRAINT "transaction_to_wallet_id_fkey" FOREIGN KEY ("to_wallet_id") REFERENCES "user_wallet"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "transaction" ADD CONSTRAINT "transaction_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "order"("id") ON DELETE SET NULL ON UPDATE CASCADE;

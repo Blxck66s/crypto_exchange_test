@@ -1,1 +1,1 @@
-export * from './createOrder.dto';
+export * from './placeOrder.dto';
